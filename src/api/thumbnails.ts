@@ -37,8 +37,11 @@ export async function handlerUploadThumbnail(cfg: ApiConfig, req: BunRequest) {
     );
   }
   const mediaType = file.type;
-  if (!mediaType) {
-    throw new BadRequestError("Missing Content-Type for thumbnail");
+  const allowedMediaTypes = ["image/jpeg", "image/png"];
+  if (!mediaType || !allowedMediaTypes.includes(mediaType)) {
+    throw new BadRequestError(
+      `Invalid Content-Type for thumbnail: ${mediaType}`
+    );
   }
 
   const ext = mediaTypeToExt(mediaType);
