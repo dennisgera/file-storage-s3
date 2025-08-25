@@ -7,6 +7,7 @@ import { validate as validateUUID } from "uuid";
 import { getBearerToken, validateJWT } from "../auth";
 import { getVideo, updateVideo } from "../db/videos";
 import { randomBytes } from "crypto";
+import { getVideoAspectRatio } from "./assets";
 
 const MAX_UPLOAD_SIZE = 1 << 30; // 1GB
 
@@ -53,12 +54,14 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
     );
   }
   // generate file key
-  const fileKey = randomBytes(32).toString("hex") + ".mp4";
+  let fileKey = randomBytes(32).toString("hex") + ".mp4";
 
   // save to temporary file
   const tempPath = `/tmp/${fileKey}`;
   try {
     await Bun.write(tempPath, file);
+    const aspectRatio = await getVideoAspectRatio(tempPath);
+    fileKey = `${aspectRatio}/${fileKey}`;
 
     // upload to s3
     await cfg.s3Client
