@@ -5,7 +5,7 @@ import { type ApiConfig } from "../config";
 import type { BunRequest } from "bun";
 import { validate as validateUUID } from "uuid";
 import { getBearerToken, validateJWT } from "../auth";
-import { getVideo, updateVideo } from "../db/videos";
+import { getVideo, updateVideo, type Video } from "../db/videos";
 import { randomBytes } from "crypto";
 import { uploadVideoToS3 } from "../s3";
 
@@ -69,8 +69,7 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
     await uploadVideoToS3(cfg, fileKey, processedPath, mediaType);
 
     // update video url in db
-    const s3Url = `https://${cfg.s3Bucket}.s3.${cfg.s3Region}.amazonaws.com/${fileKey}`;
-    video.videoURL = s3Url;
+    video.videoURL = fileKey;
     updateVideo(cfg.db, video);
   } finally {
     // clean up temporary file
@@ -81,7 +80,7 @@ export async function handlerUploadVideo(cfg: ApiConfig, req: BunRequest) {
     }
   }
 
-  return respondWithJSON(200, null);
+  return respondWithJSON(200, dbVideoToSignedVideo(cfg, video));
 }
 
 export async function getVideoAspectRatio(filePath: string): Promise<string> {
@@ -157,4 +156,28 @@ export async function processVideoForFastStart(
   }
 
   return processedFilePath;
+}
+
+export function generatePresignedURL(
+  cfg: ApiConfig,
+  key: string,
+  expireTime: number = 3600
+): string {
+  return cfg.s3Client.presign(key, {
+    bucket: cfg.s3Bucket,
+    expiresIn: expireTime,
+    method: "GET",
+  });
+}
+
+export function dbVideoToSignedVideo(cfg: ApiConfig, video: Video): Video {
+  if (!video.videoURL) {
+    return video;
+  }
+
+  const presignedURL = generatePresignedURL(cfg, video.videoURL);
+  return {
+    ...video,
+    videoURL: presignedURL,
+  };
 }
